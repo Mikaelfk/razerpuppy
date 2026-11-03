@@ -36,7 +36,9 @@ Opening preferences does not change lighting. The controls are choices to apply,
 
 The Naga V2 HyperSpeed has no lighting interface in OpenRazer, so it does not show lighting controls. OpenRazer must already support and detect your device; this extension does not install hardware drivers. Hardware validation is still required on a real Naga V2 Pro.
 
-Development regression checks: `node tests/lighting.test.mjs` (no GNOME session required).
+Device lists refresh while the extension and preferences are open, including USB/wireless connection changes. When the wireless receiver remains listed alongside the matching wired mouse, the tray uses the wired battery reading without replacing your saved device preference. Device discovery still depends on OpenRazer exposing the connection in its device list.
+
+Development regression checks: `node tests/lighting.test.mjs` and `node tests/deviceconnection.test.mjs` (no GNOME session required).
 
 # Screenshots
 

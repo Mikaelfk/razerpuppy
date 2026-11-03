@@ -1,4 +1,5 @@
 import Gio from "gi://Gio";
+import GLib from "gi://GLib";
 import {discoverLighting} from "./lighting.js";
 
 import { ExtensionPreferences, gettext as _, } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
@@ -19,8 +20,43 @@ export default class RazerPuppyPreferences extends ExtensionPreferences {
   }
   fillPreferencesWindow(window) {
     this._window = window;
-    this._razer_dbus = new RazerDbusHandler.RazerDbusHandler();
-    this._razer_dbus.GetDevices(this.onDeviceList.bind(this), this.onDeviceListError.bind(this));
+    this._generation ??= 0;
+    this._buildDevicePages();
+    const refresh = (force = false) => {
+      this._razer_dbus.GetDevices(list => {
+        const key = [...list].sort().join('\n');
+        if (force || key !== this._deviceListKey) this._buildDevicePages(list);
+      }, this.onDeviceListError.bind(this));
+    };
+    const signal = Gio.DBus.session.signal_subscribe('org.razer', 'razer.devices',
+      null, '/org/razer', null, Gio.DBusSignalFlags.NONE, () => refresh(true));
+    const timer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 3, () => {
+      refresh();
+      return GLib.SOURCE_CONTINUE;
+    });
+    window.connect('close-request', () => {
+      this._generation++;
+      Gio.DBus.session.signal_unsubscribe(signal);
+      GLib.Source.remove(timer);
+      return false;
+    });
+  }
+  _buildDevicePages(list) {
+    this._generation++;
+    const generation = this._generation;
+    // Ignore replies belonging to pages that have been removed or closed.
+    const handler = new RazerDbusHandler.RazerDbusHandler();
+    this._razer_dbus = new Proxy(handler, {
+      get: (target, key) => typeof target[key] === 'function'
+        ? (...args) => target[key](...args.map(arg => typeof arg === 'function'
+          ? (...reply) => { if (generation === this._generation) arg(...reply); }
+          : arg)) : target[key],
+    });
+    for (const page of [this._dpiPageHandler, this._powerPageHandler,
+      this._logoRgbPageHandler, this._aboutPageHandler]) {
+      if (page) this._window.remove(page._settingsPage ?? page._powerPage ?? page._page ?? page._aboutPage);
+    }
+    this._devices = [];
     //Dpi Settings
     this._dpiPageHandler = new DpiPageHandler.DpiPageHandler(this);
     this._dpiPageHandler.createPage();
@@ -34,9 +70,10 @@ export default class RazerPuppyPreferences extends ExtensionPreferences {
     this._aboutPageHandler = new AboutPagehandler.AboutPageHandler(this);
     this._aboutPageHandler.createPage();
 
-    /*window.connect("close-request", () => {      
-    });*/
+    if (list) this.onDeviceList(list);
+    else this._razer_dbus.GetDevices(this.onDeviceList.bind(this), this.onDeviceListError.bind(this));
   }
+
   getDeviceBySerial(device_serial) {
     try {
       for (let i = 0; i < this._devices.length; ++i) {
@@ -172,6 +209,7 @@ export default class RazerPuppyPreferences extends ExtensionPreferences {
     this.logException(`prefs onLogoEffectColorsError [${device_serial} ${error}]`);
   }
   onDeviceList(device_list) {
+    this._deviceListKey = [...device_list].sort().join("\n");
     this.logDevelopment(`prefs onDeviceList [${device_list}]`);
     try {
       for (let i = 0; i < device_list.length; ++i) {

@@ -12,6 +12,7 @@ import * as RazerDbusHandler from './razerdbushandler.js'
 import * as DevicePopup from './devicesubmenu.js'
 import * as Constants from './constants.js'
 import * as Utils from "./utils.js";
+import {selectBatteryTransport} from "./deviceconnection.js";
 
 export const Indicator = GObject.registerClass(
     class Indicator extends PanelMenu.Button {
@@ -93,6 +94,12 @@ export const Indicator = GObject.registerClass(
                 this._percentage_label.style = `font-size: ${size}px;`;
                 this._percentage_label.style_changed();
             });
+            this._device_signal = Gio.DBus.session.signal_subscribe('org.razer',
+                'razer.devices', null, '/org/razer', null, Gio.DBusSignalFlags.NONE,
+                () => {
+                    if (!this._destroyed) this._razer_dbus.GetDevices(
+                        this.onDeviceList.bind(this), this.onDeviceListError.bind(this));
+                });
             //return;
             this._razer_dbus.GetDevices(this.onDeviceList.bind(this), this.onDeviceListError.bind(this));
             //return;
@@ -134,6 +141,13 @@ export const Indicator = GObject.registerClass(
             this._razer_dbus.SetDpi(default_dpi_device_serial, dpis[razer_device._hotkey_dpi_index]);
         }
 
+        deviceCallback(device, callback) {
+            return (...args) => {
+                if (!this._destroyed && device._is_online &&
+                    this.getRazerDevice(device._device_serial) === device)
+                    callback.apply(this, args);
+            };
+        }
         onIntrospect(device_serial, xml) {            
             let bus_info = Gio.DBusNodeInfo.new_for_xml(xml);
             if (bus_info === null) {
@@ -152,12 +166,14 @@ export const Indicator = GObject.registerClass(
             }
             this.logDevelopment(`onIntrospect ${device_serial} found getBattery method!`);
             let device = this.getRazerDevice(device_serial);
+            if (!device || !device._is_online) return;
             device._has_get_battery_method = true;
             this._razer_dbus.GetBatteryPower(device_serial,
-                this.onPowerStatus.bind(this),
-                this.onPowerError.bind(this));
+                this.deviceCallback(device, this.onPowerStatus),
+                this.deviceCallback(device, this.onPowerError));
         }
         onDeviceList(device_list) {
+            if (this._destroyed) return;
             try {
                 this.logDevelopment(`onDeviceList [${device_list}]`);
                 this.clearUnpluggedDevices(device_list);
@@ -174,19 +190,20 @@ export const Indicator = GObject.registerClass(
                         razer_device._device_serial = device_serial;
                         this._devices.push(razer_device);                        
                     }
+                    razer_device._is_online = true;
                     this._razer_dbus.GetDeviceName(razer_device._device_serial,
-                        this.onDeviceName.bind(this),
-                        this.onDeviceNameError.bind(this));
+                        this.deviceCallback(razer_device, this.onDeviceName),
+                        this.deviceCallback(razer_device, this.onDeviceNameError));
                     this._razer_dbus.GetDeviceType(razer_device._device_serial,
-                        this.onDeviceType.bind(this),
-                        this.onDeviceTypeError.bind(this));
+                        this.deviceCallback(razer_device, this.onDeviceType),
+                        this.deviceCallback(razer_device, this.onDeviceTypeError));
 
                     if (razer_device._has_get_battery_method === undefined)
-                        this._razer_dbus.Introspect(razer_device._device_serial, this.onIntrospect.bind(this));
+                        this._razer_dbus.Introspect(razer_device._device_serial, this.deviceCallback(razer_device, this.onIntrospect));
                     else if (razer_device._has_get_battery_method === true)
                         this._razer_dbus.GetBatteryPower(razer_device._device_serial,
-                            this.onPowerStatus.bind(this),
-                            this.onPowerError.bind(this));
+                            this.deviceCallback(razer_device, this.onPowerStatus),
+                            this.deviceCallback(razer_device, this.onPowerError));
                 }
             }
             catch (e) {
@@ -218,17 +235,17 @@ export const Indicator = GObject.registerClass(
             this.logDevelopment(`onDeviceType [${device_serial}] [${device_type}]`);
             try {
                 let device = this.getRazerDevice(device_serial);
-                if (device !== null)
-                    device._device_type = device_type;
+                if (!device || !device._is_online) return;
+                device._device_type = device_type;
                 if (device_type === Constants.DEVICE_TYPE_MOUSE) {
                     let default_dpi_device_serial = this._settings.get_string(Constants.SCHEMA_DPI_HOTKEY_DEVICE_SERIAL);
                     if (Utils.isEmptyString(default_dpi_device_serial))  //If there is no default already
                         this._settings.set_string(Constants.SCHEMA_DPI_HOTKEY_DEVICE_SERIAL, device_serial);
 
                     this._razer_dbus.GetDpi(device_serial, 
-                        this.onGetDpi.bind(this), this.onGetDpiError.bind(this));
+                        this.deviceCallback(device, this.onGetDpi), this.deviceCallback(device, this.onGetDpiError));
                     this._razer_dbus.GetDpiStages(device_serial, 
-                        this.onGetDpiStages.bind(this), this.onGetDpiStagesError.bind(this));
+                        this.deviceCallback(device, this.onGetDpiStages), this.deviceCallback(device, this.onGetDpiStagesError));
                 }
             }
             catch (error) {
@@ -288,17 +305,23 @@ export const Indicator = GObject.registerClass(
         }
         onPowerStatus(device_serial, power_level, no_method) {
             this.logDevelopment(`onPowerStatus [${device_serial}] [${power_level}] [${no_method}]`);
+            let device = this.getRazerDevice(device_serial);
+            if (!device || !device._is_online) return;
+            if (no_method) {
+                device._has_get_battery_method = undefined;
+                return;
+            }
+            if (!Number.isFinite(power_level) || power_level < 0) return;
             let default_battery_device_serial = this._settings.get_string(Constants.SCHEMA_BATTERY_DEVICE_SERIAL);
             if (Utils.isEmptyString(default_battery_device_serial)) { //Check if there is no default device for power
                 default_battery_device_serial = device_serial;
                 this._settings.set_string(Constants.SCHEMA_BATTERY_DEVICE_SERIAL, device_serial);
             }
-            let device = this.getRazerDevice(device_serial);
             if (device !== null) {
                 power_level = this.getNormalizedPowerLevel(device, power_level);
                 device._power_level = power_level;
             }
-            this._razer_dbus.GetIsCharging(device_serial, this.onIsCharging.bind(this), this.onIsChargingError.bind(this));
+            this._razer_dbus.GetIsCharging(device_serial, this.deviceCallback(device, this.onIsCharging), this.deviceCallback(device, this.onIsChargingError));
             this.LogState("onPowerStatus");
         }
         onPowerError(device_serial, error) {
@@ -337,7 +360,8 @@ export const Indicator = GObject.registerClass(
                     return;
                 let default_battery_device_serial = this._settings.get_string(Constants.SCHEMA_BATTERY_DEVICE_SERIAL);
                 device._is_charging = is_charging;
-                if (device_serial === default_battery_device_serial) { //Default power device is this device
+                const active = this.getDefaultPowerDevice();
+                if (active && device_serial === active._device_serial) { //Render the live transport
                     let power_level = device._power_level;
                     this.showPowerPercentage(device);
                     this.logDevelopment(`onIsCharging Active Device Found: [${device_serial}] [${power_level}]`);
@@ -394,7 +418,7 @@ export const Indicator = GObject.registerClass(
         }
         getAnyRazerDeviceWithBattery() {
             for (let i = 0; i < this._devices.length; ++i) {
-                if (this._devices[i]._has_get_battery_method === true) 
+                if (this._devices[i]._is_online && this._devices[i]._has_get_battery_method === true)
                     return this._devices[i];                
             }
             return null;
@@ -404,7 +428,7 @@ export const Indicator = GObject.registerClass(
             //Try to get the device which was set as default power device
             let default_battery_device_serial = this._settings.get_string(Constants.SCHEMA_BATTERY_DEVICE_SERIAL);            
             if (!Utils.isEmptyString(default_battery_device_serial)) 
-                device = this._devices.find(dev => default_battery_device_serial === dev._device_serial);                        
+                device = this._devices.find(dev => dev._is_online && default_battery_device_serial === dev._device_serial);
             
             //Default not found. Get any device with a battery
             if (device === null || device === undefined) {
@@ -413,7 +437,7 @@ export const Indicator = GObject.registerClass(
                     this._settings.set_string(Constants.SCHEMA_BATTERY_DEVICE_SERIAL, device._device_serial);
             }                
             
-            return device;
+            return selectBatteryTransport(this._devices, device);
         }
         showDevicePopupMenu(device) {
             try {
@@ -492,6 +516,7 @@ export const Indicator = GObject.registerClass(
                     }
                 }                    
             }
+            this._devices = this._devices.filter(device => device._is_online);
         }
         hideUnpluggedDevice(device_serial) {
             for (let i = 0; i < this._device_popup_menus.length; ++i) {
@@ -614,6 +639,8 @@ export const Indicator = GObject.registerClass(
                 console.error(message);
         }
         destroy() {
+            this._destroyed = true;
+            Gio.DBus.session.signal_unsubscribe(this._device_signal);
             //Timer
             GLib.Source.remove(this._repeat_timer);
             this._repeat_timer = null;

@@ -82,6 +82,7 @@ export const DeviceSubMenu = GObject.registerClass(
         {
             //console.error(`UpdateDevice: ${_this} ${device}`);
             _this._device = device;
+            _this._current_dpi = -1; // Reused slots must refresh the device name too.
             for (let i = 0; i < _this._dpi_slots.length; ++i) 
                 _this._dpi_slots[i].updateDevice(_this._dpi_slots[i], device);                    
             
