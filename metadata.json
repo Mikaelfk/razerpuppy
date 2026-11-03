@@ -3,7 +3,7 @@
   "name": "Razer Puppy",  
   "description": "Razer Mice battery watcher (accurate power percentage and charging status), DPI and RGB configuration extension. Also enables a user defined global hotkey to switch DPI. IMPORTANT: Requires installation of Open Razer. This extension is not affiliated, funded, or in any way associated with Razer.",    
   "settings-schema": "org.gnome.shell.extensions.razer-puppy",
-  "shell-version": ["46", "47", "48"],
+  "shell-version": ["46", "47", "48", "51"],
   "url": "https://github.com/ayhanavci/razerpuppy",
   "gettext-domain": "razer-puppy@dokaton.com"
 }

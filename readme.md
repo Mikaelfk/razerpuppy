@@ -16,7 +16,7 @@ It utilizes [Open Razer](https://openrazer.github.io/) DBus daemon. So make sure
 <img src="./.readme/full_screenshot.png" alt="Alt Text" width="100%" height="100%">
 
 # Requirements
-1. [Gnome 46,47 or 48](https://gnome.org/) 
+1. [Gnome 46, 47, 48 or 51](https://gnome.org/)
 2. [Open Razer](https://openrazer.github.io/#download) 
 
 # Features 
@@ -27,6 +27,16 @@ It utilizes [Open Razer](https://openrazer.github.io/) DBus daemon. So make sure
 * Settings to configure global DPI switch hotkey. This lets the user change the DPI, regardless of the active window.
 * If there is a device with Logo RGB, the color and light effects can be configured in the settings.
 * Can set a default device to display power of and a default mice to bind to DPI hotkey.
+
+## Naga V2 lighting
+
+The **Lighting** preferences page supports the Naga V2 Pro in wired and wireless mode when it is detected by OpenRazer. Logo and thumb-grid (Chroma) lighting have separate controls. Choose an advertised effect, select its colors, and click **Apply effect**. Logo brightness has a separate **Apply brightness** button. Only zones, effects and brightness setters exposed by the daemon are shown; effect readback is not required.
+
+Opening preferences does not change lighting. The controls are choices to apply, rather than a display of the current hardware state. Reactive effects use speed 2. Supported effects include Off, Static, single/dual/random breathing, Spectrum and Reactive, depending on the device. Thumb-grid effects apply to the whole grid; individual button colors are not configured here.
+
+The Naga V2 HyperSpeed has no lighting interface in OpenRazer, so it does not show lighting controls. OpenRazer must already support and detect your device; this extension does not install hardware drivers. Hardware validation is still required on a real Naga V2 Pro.
+
+Development regression checks: `node tests/lighting.test.mjs` (no GNOME session required).
 
 # Screenshots
 

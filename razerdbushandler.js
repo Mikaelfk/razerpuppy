@@ -10,6 +10,23 @@ export class RazerDbusHandler {
     constructor() {
 
     }
+    async CallLighting(device_serial, iface, method, signature, values) {
+        const connection = await new Promise((resolve, reject) => {
+            Gio.DBusProxy.new_for_bus(Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE,
+                null, 'org.razer', '/org/razer/device/' + device_serial, iface, null,
+                (_source, result) => {
+                    try { resolve(Gio.DBusProxy.new_for_bus_finish(result)); }
+                    catch (error) { reject(error); }
+                });
+        });
+        return new Promise((resolve, reject) => {
+            connection.call(method, signature ? new GLib.Variant(signature, values) : null,
+                Gio.DBusCallFlags.NONE, 5000, null, (proxy, result) => {
+                    try { resolve(proxy.call_finish(result)); }
+                    catch (error) { reject(error); }
+                });
+        });
+    }
     async GetDeviceInterface(method) {
         let log_method_name = "GetDeviceInterface";
         try {

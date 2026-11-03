@@ -1,4 +1,5 @@
 import Gio from "gi://Gio";
+import {discoverLighting} from "./lighting.js";
 
 import { ExtensionPreferences, gettext as _, } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
 import * as Constants from './constants.js'
@@ -67,6 +68,7 @@ export default class RazerPuppyPreferences extends ExtensionPreferences {
     device._has_get_battery_method = false;
     let bus_info = Gio.DBusNodeInfo.new_for_xml(xml);
     if (bus_info !== null) {
+      device._lightingZones = discoverLighting(bus_info);
       //Battery Interface
       let bus_power_interface = bus_info.lookup_interface('razer.device.power');
       if (bus_power_interface !== null) {
@@ -204,11 +206,7 @@ export default class RazerPuppyPreferences extends ExtensionPreferences {
         this._razer_dbus.GetDeviceType(device._device_serial,
           this.onDeviceType.bind(this),
           this.onDeviceTypeError.bind(this));        
-        if (device._has_logo_brightness_method) {
-          this._razer_dbus.GetLogoEffect(device._device_serial,
-            this.onLogoEffect.bind(this),
-            this.onLogoEffectError.bind(this));
-        }
+        this._logoRgbPageHandler.onDeviceName(device);
       }
     }
     catch (error) {
