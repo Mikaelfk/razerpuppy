@@ -17,7 +17,8 @@ const DpiSubMenu = GObject.registerClass(
             this._device = null;
             this._parent = null;            
             
-            this.vbox = new St.BoxLayout({ vertical: false });
+            // BoxLayout defaults to horizontal; GNOME 51 removed `vertical`.
+            this.vbox = new St.BoxLayout();
             this.add_child(this.vbox);
             
             this.label = new St.Label({
