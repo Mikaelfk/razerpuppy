@@ -30,7 +30,7 @@ It utilizes [Open Razer](https://openrazer.github.io/) DBus daemon. So make sure
 
 ## Naga V2 lighting
 
-The **Lighting** preferences page supports the Naga V2 Pro in wired and wireless mode when it is detected by OpenRazer. Logo and thumb-grid (Chroma) lighting have separate controls. Choose an advertised effect, select its colors, and click **Apply effect**. Logo brightness has a separate **Apply brightness** button. Only zones, effects and brightness setters exposed by the daemon are shown; effect readback is not required.
+The **Lighting** preferences page supports the Naga V2 Pro in wired and wireless mode when it is detected by OpenRazer. Logo and thumb-grid (Chroma) lighting have separate controls. Choose an advertised effect, select its colors, and click **Apply effect**. Logo brightness has a separate **Apply brightness** button. Only zones, effects and brightness setters exposed by the daemon are shown. Chroma commands may affect the whole device: the extension reads the current logo state first and restores it after the write. If the required logo readback fails, the Chroma write is blocked. A brief logo transition may occur while the commands run.
 
 Opening preferences does not change lighting. The controls are choices to apply, rather than a display of the current hardware state. Reactive effects use speed 2. Supported effects include Off, Static, single/dual/random breathing, Spectrum and Reactive, depending on the device. Thumb-grid effects apply to the whole grid; individual button colors are not configured here.
 

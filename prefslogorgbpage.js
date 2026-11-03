@@ -4,12 +4,13 @@ import Gdk from 'gi://Gdk';
 import * as Constants from './constants.js';
 import {gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 import {RazerDbusHandler} from './razerdbushandler.js';
-import {effectArguments} from './lighting.js';
+import {effectArguments, LightingController} from './lighting.js';
 
 export class LogoRgbPageHandler {
     constructor(prefs) {
         this._prefs = prefs;
         this._dbus = new RazerDbusHandler();
+        this._lighting = new LightingController(this._dbus.CallLighting.bind(this._dbus));
     }
 
     createPage() {
@@ -49,7 +50,8 @@ export class LogoRgbPageHandler {
             button.set_sensitive(false);
             status.set_text('');
             try {
-                await this._dbus.CallLighting(device._device_serial, iface, method, signature, values);
+                await this._lighting.write(device._device_serial, device._lightingZones, zone,
+                    iface, method, signature, values);
                 status.set_text(_('Applied'));
             } catch (error) {
                 status.set_text(`${_('Unable to apply lighting')}: ${error.message}`);

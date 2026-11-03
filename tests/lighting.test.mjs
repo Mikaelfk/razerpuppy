@@ -73,3 +73,60 @@ test('D-Bus writes route to the chosen serial and zone and report failures', asy
     delete globalThis.lightingTestGio;
     delete globalThis.lightingTestGLib;
 });
+
+const {LightingController} = await load(readFileSync(new URL('../lighting.js', import.meta.url), 'utf8'));
+const zones = discoverLighting(naga);
+const savedLogo = {
+    getLogoEffect: 'static', getLogoEffectColors: [20, 40, 60], getLogoBrightness: 73,
+};
+function controllerFixture(overrides = {}) {
+    const calls = [];
+    const controller = new LightingController(async (_serial, iface, method, signature, values) => {
+        calls.push({iface, method, signature, values});
+        if (method in overrides && overrides[method] instanceof Error) throw overrides[method];
+        return {recursiveUnpack: () => [method in overrides ? overrides[method] : savedLogo[method]]};
+    });
+    return {controller, calls};
+}
+
+test('Chroma effects restore the exact logo color and brightness after the global write', async () => {
+    const {controller, calls} = controllerFixture();
+    await controller.write('mouse', zones, zones[1], zones[1].interface, 'setStatic', '(yyy)', [255, 0, 0]);
+    assert.deepEqual(calls.map(call => call.method), [
+        'getLogoEffect', 'getLogoEffectColors', 'getLogoBrightness',
+        'setStatic', 'setLogoStatic', 'setLogoBrightness',
+    ]);
+    assert.deepEqual(calls.at(-2).values, [20, 40, 60]);
+    assert.deepEqual(calls.at(-1).values, [73]);
+});
+
+test('global brightness restores logo brightness without changing its effect', async () => {
+    const {controller, calls} = controllerFixture();
+    await controller.write('mouse', zones, zones[1], 'razer.device.lighting.brightness', 'setBrightness', '(d)', [10]);
+    assert.deepEqual(calls.map(call => call.method), ['getLogoBrightness', 'setBrightness', 'setLogoBrightness']);
+    assert.deepEqual(calls.at(-1).values, [73]);
+});
+
+test('failed logo readback prevents all writes', async () => {
+    const {controller, calls} = controllerFixture({getLogoBrightness: new Error('Read failed')});
+    await assert.rejects(controller.write('mouse', zones, zones[1], zones[1].interface, 'setNone', null, []), /Read failed/);
+    assert.ok(calls.every(call => call.method.startsWith('get')));
+});
+
+test('a failed global write still restores logo and permits the next edit', async () => {
+    const {controller, calls} = controllerFixture({setNone: new Error('Write failed')});
+    await assert.rejects(controller.write('mouse', zones, zones[1], zones[1].interface, 'setNone', null, []), /Write failed/);
+    assert.deepEqual(calls.slice(-2).map(call => call.method), ['setLogoStatic', 'setLogoBrightness']);
+    await controller.write('mouse', zones, zones[0], zones[0].interface, 'setLogoNone', null, []);
+    assert.equal(calls.at(-1).method, 'setLogoNone');
+});
+
+test('a simultaneous logo edit is applied after the Chroma restore', async () => {
+    const {controller, calls} = controllerFixture();
+    await Promise.all([
+        controller.write('mouse', zones, zones[1], zones[1].interface, 'setNone', null, []),
+        controller.write('mouse', zones, zones[0], zones[0].interface, 'setLogoStatic', '(yyy)', [1, 2, 3]),
+    ]);
+    assert.equal(calls.at(-1).method, 'setLogoStatic');
+    assert.deepEqual(calls.at(-1).values, [1, 2, 3]);
+});
